@@ -1,0 +1,179 @@
+#include <iostream>
+#include <fstream>
+#include <cmath>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <limits>
+
+using namespace std;
+
+// Включение ANSI в Windows
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+void enableVT() {
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (h == INVALID_HANDLE_VALUE) return;
+
+    DWORD mode = 0;
+    if (!GetConsoleMode(h, &mode)) return;
+
+    mode |= 0x0004; // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    SetConsoleMode(h, mode);
+}
+#else
+void enableVT() {}
+#endif
+
+// ANSI цвета
+const string RESET = "\033[0m";
+const string BOLD = "\033[1m";
+const string RED = "\033[31m";
+const string GREEN = "\033[32m";
+const string YELLOW = "\033[33m";
+const string BLUE = "\033[34m";
+const string MAG = "\033[35m";
+const string CYAN = "\033[36m";
+
+// Формат числа
+string formatNumber(double x) {
+    if (fabs(x - round(x)) < 1e-12)
+        return to_string((long long)round(x));
+
+    ostringstream oss;
+    oss << fixed << setprecision(12) << x;
+    string s = oss.str();
+
+    while (!s.empty() && s.back() == '0') s.pop_back();
+    if (!s.empty() && s.back() == '.') s.pop_back();
+    if (s == "-0") s = "0";
+
+    return s;
+}
+
+// Формирование уравнения
+string buildEquation(double a, double b, double c) {
+    string eq = "";
+
+    if (a == 1) eq += "x^2";
+    else if (a == -1) eq += "-x^2";
+    else eq += formatNumber(a) + "x^2";
+
+    if (b > 0) eq += "+" + formatNumber(b) + "x";
+    else if (b < 0) eq += formatNumber(b) + "x";
+
+    if (c > 0) eq += "+" + formatNumber(c);
+    else if (c < 0) eq += formatNumber(c);
+
+    eq += "=0";
+    return eq;
+}
+
+// Запись истории
+void appendToHistory(const string& equation, const string& resultLine) {
+    ofstream history("history.txt", ios::app);
+    if (!history.is_open()) {
+        cerr << RED << "Не удалось открыть history.txt" << RESET << endl;
+        return;
+    }
+    history << equation << "\n" << resultLine << "\n";
+    history.close();
+}
+
+int main() {
+    setlocale(LC_ALL, "Russian");
+    enableVT(); // ← ВКЛЮЧАЕМ VT-МОД РАНЬШЕ ВСЕГО
+
+    double a, b, c;
+    string answer;
+
+    cout << CYAN << BOLD
+        << "Калькулятор квадратных уравнений (бесконечный)."
+        << RESET
+        << " Для выхода введите 'n' на вопрос о продолжении.\n";
+
+    while (true) {
+        cout << "\n" << YELLOW << "Введите a: " << RESET;
+        if (!(cin >> a)) {
+            cerr << RED << "Ошибка ввода. Пожалуйста, введите число." << RESET << endl;
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            continue;
+        }
+
+        cout << YELLOW << "Введите b: " << RESET;
+        if (!(cin >> b)) {
+            cerr << RED << "Ошибка ввода." << RESET << endl;
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            continue;
+        }
+
+        cout << YELLOW << "Введите c: " << RESET;
+        if (!(cin >> c)) {
+            cerr << RED << "Ошибка ввода." << RESET << endl;
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            continue;
+        }
+
+        if (fabs(a) < 1e-15) {
+            cout << RED << "a = 0 — это не квадратное уравнение. Перезапуск." << RESET << "\n";
+            continue;
+        }
+
+        string equation = buildEquation(a, b, c);
+
+        cout << "\n" << GREEN << "Получившееся уравнение: " << RESET << equation << endl;
+        cout << YELLOW << "Уравнение отображено правильно? (y/n): " << RESET;
+        cin >> answer;
+
+        if (answer == "y" || answer == "Y" || answer == "да" || answer == "Да") {
+
+            double D = b * b - 4 * a * c;
+            string Dstr = formatNumber(D);
+
+            cout << BLUE << "\nD = " << Dstr << RESET << endl;
+
+            if (D < -1e-12) {
+                cout << MAG << "Дискриминант отрицательный: корней нет." << RESET << "\n";
+                appendToHistory(equation, "D = " + Dstr + "; корней нет.");
+            }
+            else if (fabs(D) < 1e-12) {
+                double x = -b / (2 * a);
+                string xs = formatNumber(x);
+
+                cout << MAG << "Один корень: x = " << xs << RESET << "\n";
+                appendToHistory(equation, "D = " + Dstr + "; x = " + xs);
+            }
+            else {
+                double sqrtD = sqrt(D);
+                double x1 = (-b - sqrtD) / (2 * a);
+                double x2 = (-b + sqrtD) / (2 * a);
+
+                string x1s = formatNumber(x1);
+                string x2s = formatNumber(x2);
+
+                cout << MAG << "Два корня: x1 = " << x1s << "; x2 = " << x2s << RESET << "\n";
+
+                appendToHistory(equation, "D = " + Dstr + "; x1 = " + x1s + "; x2 = " + x2s);
+            }
+
+            cout << "\n" << YELLOW << "Хотите решить ещё? (y/n): " << RESET;
+            cin >> answer;
+            if (answer != "y" && answer != "Y" && answer != "да" && answer != "Да")
+                break;
+        }
+        else {
+            cout << MAG << "\nПерезапуск ввода коэффициентов...\n" << RESET;
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+    }
+
+    cout << CYAN << "Выход. История сохранена в "
+        << BOLD << "history.txt"
+        << RESET << CYAN << ".\n" << RESET;
+
+    return 0;
+}
